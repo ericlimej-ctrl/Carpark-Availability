@@ -1,0 +1,6 @@
+{
+  "name": "ParkSG - Singapore Carpark Availability & Rates",
+  "description": "Interactive map and live lot availability tracker for Singapore carparks (LTA commercial & HDB), featuring parking rates calculation, EV charging, and API layer ready for DataMall.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
