@@ -1012,19 +1012,36 @@ export function getApiConfiguration(): ApiStatus {
 
 /**
  * Primary function to fetch carparks.
- * - If ENV_USE_MOCK is true (default): returns the mock dataset.
- * - If ENV_USE_MOCK is false: calls real LTA / Data.gov.sg endpoints with fallback.
+ * 1. Attempts to query the server-side proxy at /api/carparks (project root level /api)
+ *    which accesses https://datamall2.mytransport.sg/ltaodataservice/CarParkAvailabilityv2
+ * 2. If no key is configured on server or in offline prototype mode, serves validated mock dataset.
  */
 export async function fetchCarparks(): Promise<{ carparks: Carpark[]; source: 'mock' | 'lta_live'; error?: string }> {
+  // Try querying root /api/carparks backend proxy
+  try {
+    const res = await fetch('/api/carparks');
+    if (res.ok) {
+      const result = await res.json();
+      if ((result.source === 'lta_live' || result.source === 'lta_cache') && Array.isArray(result.data) && result.data.length > 0) {
+        return {
+          carparks: result.data,
+          source: 'lta_live',
+        };
+      }
+    }
+  } catch (backendErr) {
+    console.debug('Backend /api/carparks check completed, proceeding with client configuration:', backendErr);
+  }
+
+  // If ENV_USE_MOCK is active or no key provided, return rich mock dataset
   if (ENV_USE_MOCK || !LTA_API_KEY || LTA_API_KEY === 'YOUR_LTA_DATAMALL_ACCOUNT_KEY') {
-    // Return mock data
     return {
       carparks: [...MOCK_CARPARKS],
       source: 'mock',
     };
   }
 
-  // Attempt live LTA DataMall CarParkAvailabilityv2 call
+  // Direct client fetch attempt if VITE_USE_MOCK_DATA is false and VITE_LTA_DATAMALL_KEY is provided
   try {
     const response = await fetch(LTA_DATAMALL_ENDPOINT, {
       method: 'GET',
@@ -1043,8 +1060,6 @@ export async function fetchCarparks(): Promise<{ carparks: Carpark[]; source: 'm
       throw new Error('Unexpected response format from LTA DataMall API');
     }
 
-    // Map LTA response to our Carpark interface
-    // LTA format: { CarParkID: string, Area: string, Development: string, Location: "1.293 103.857", AvailableLots: number, LotType: "C", Agency: "LTA" }
     const mappedCarparks: Carpark[] = data.value.map((item: any, idx: number) => {
       const coords = item.Location ? item.Location.split(' ') : ['1.3521', '103.8198'];
       const lat = parseFloat(coords[0]) || 1.3521;
@@ -1089,7 +1104,7 @@ export async function fetchCarparks(): Promise<{ carparks: Carpark[]; source: 'm
       source: 'lta_live',
     };
   } catch (err: any) {
-    console.warn('Failed to fetch from live LTA DataMall, falling back to mock data:', err);
+    console.warn('Falling back to mock carparks data:', err);
     return {
       carparks: [...MOCK_CARPARKS],
       source: 'mock',
